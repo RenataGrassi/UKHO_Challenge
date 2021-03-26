@@ -135,7 +135,7 @@ dado_wmag = np.array(np.sqrt(np.multiply(dado_u10,dado_u10) + np.multiply(dado_v
 
 
 
-# Plots
+# Plots - serie completa
 
 fig = plt.figure()
 plt.title('Magnitude do vento')
@@ -182,6 +182,69 @@ plt.ylabel('(hPa)')
 plt.ylim([1005, 1025])
 fig.set_size_inches(13,4)
 plt.savefig('fig_pressao.jpg', dpi=200, bbox_inches='tight', pad_inches=0.1)
+plt.show()
+plt.close()
+
+
+
+
+
+
+
+
+
+
+
+# Plots - intervalo
+
+x1 = 620
+x2 = 744
+
+fig = plt.figure()
+plt.title('Magnitude do vento')
+plt.plot(np.arange(x1-1,x2), dado_wmag[x1-1:])
+plt.grid()
+plt.xlabel('t (h)')
+plt.ylabel('Vento (m/s)')
+plt.ylim([0, 20])
+fig.set_size_inches(13,4)
+plt.savefig('fig_intervalo_wmag.jpg', dpi=200, bbox_inches='tight', pad_inches=0.1)
+plt.show()
+plt.close()
+
+fig = plt.figure()
+plt.title('Precipitação total')
+plt.plot(np.arange(x1-1,x2), dado_prec[x1-1:])
+plt.grid()
+plt.xlabel('t (h)')
+plt.ylabel('(mm/h)')
+plt.ylim([0, 8])
+fig.set_size_inches(13,4)
+plt.savefig('fig_intervalo_prec.jpg', dpi=200, bbox_inches='tight', pad_inches=0.1)
+plt.show()
+plt.close()
+
+fig = plt.figure()
+plt.title('Altura significativa de onda')
+plt.plot(np.arange(x1-1,x2), dado_hs[x1-1:])
+plt.grid()
+plt.xlabel('t (h)')
+plt.ylabel('(m)')
+plt.ylim([0, 6])
+fig.set_size_inches(13,4)
+plt.savefig('fig_intervalo_hs.jpg', dpi=200, bbox_inches='tight', pad_inches=0.1)
+plt.show()
+plt.close()
+
+fig = plt.figure()
+plt.title('Pressao ao nivel do mar')
+plt.plot(np.arange(x1-1,x2), dado_msl[x1-1:])
+plt.grid()
+plt.xlabel('t (h)')
+plt.ylabel('(hPa)')
+plt.ylim([1005, 1025])
+fig.set_size_inches(13,4)
+plt.savefig('fig_intervalo_pressao.jpg', dpi=200, bbox_inches='tight', pad_inches=0.1)
 plt.show()
 plt.close()
 
