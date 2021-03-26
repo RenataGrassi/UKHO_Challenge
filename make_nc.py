@@ -88,3 +88,7 @@ alerta[3, 1, 1] = 0
 
 # fechando o netcdf
 ncfile.close()
+
+lat = np.arange(18.0, 18.6, 0.5)
+lon = np.arange(-63.5, -62.9, 0.5)
+time = [0, 1, 2, 3]
