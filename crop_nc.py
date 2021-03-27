@@ -1,22 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Mar 11 13:08:28 2021
-
-Programa para ler arquivos netCDF da reanalise ERA5
-
-Temos arquivos de hora em hora para jul/2020 com os seguintes parametros:
-    - precipitacao total (m)
-    - Hs (m)
-    - mslp (pressao no nivel medio do mar - Pa)
-    - vento (u10 e v10)
+Created on Sat Mar 27 11:02:22 2021
 
 @author: felipe
+
+Rotina para cortar os arquivos NC para o período escolhido:
+    5 dias (120 horas) - 27/07/2020 00:00 a 31/07/2020 23:00
+    x1 = 624
+    x2 = 743
+
+A grade lat x lon do arquivo de Hs e diferente (menor). 
+Ela será ajustada com uma interpolacao para se adequar.
+https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.interp2d.html
+
+A grade de lat x lon padrao sera: (lat1, lon1)
+
 """
+
 import netCDF4 as nc
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.io as scio
+from scipy import interpolate
 
 
 
@@ -25,6 +31,76 @@ def find_idx(vetor, valor):
     dif = np.abs(vetor - valor)
     idx = np.where(dif == np.min(dif))[0][0]
     return idx
+
+
+
+def save_nc(file,t,lat,lon,dado,var_name,data1):        
+    # file = arquivo a ser gerado  
+    # t = vetor de tempo
+    # lat = vetor de latitude
+    # lon = vetor de longitude    
+    # dado = matriz com os dados [t, lat, lon]
+    # var_name = nome da variavel para o NC
+    # data1 = string com a data inicial e passo de tempo: 'hours since 2020-01-01'
+    
+    # abrindo o netCDF para escrita
+    ncfile = nc.Dataset(file, 'w', format='NETCDF4')
+    
+    # Criando as dimensoes (que vao orientar o tamanho dos vetores e matrizes)
+    [n_t,n_lat,n_lon] = dado.shape
+    
+    latitude_dim = ncfile.createDimension('latitude', n_lat)     # latitude axis
+    longitude_dim = ncfile.createDimension('longitude', n_lon)    # longitude axis
+    time_dim = ncfile.createDimension('time', n_t)  # None = unlimited axis (append)
+    
+    # Adicionando as variaveis em si e suas informacoes complementares
+    latitude = ncfile.createVariable('latitude', np.float32, ('latitude',))
+    latitude.units = 'degrees_north'
+    latitude.long_name = 'latitude'
+    latitude.standard_name = 'latitude'
+    latitude.axis = 'Y'
+    
+    longitude = ncfile.createVariable('longitude', np.float32, ('longitude',))
+    longitude.units = 'degrees_east'
+    longitude.long_name = 'longitude'
+    longitude.axis = 'X'
+    longitude.standard_name = 'longitude'
+    
+    time = ncfile.createVariable('time', np.float64, ('time',))
+    time.units = data1  # 'hours since 2020-01-01'
+    time.long_name = 'time'
+    
+    # criando a variavel para nosso alerta
+    # ela tera 3 dimensoes (tempo, lat, long).
+    # Atencao a ordem deles pois sera importante na carga dos dados (ver linha 65)
+    #
+    dado_var = ncfile.createVariable(var_name, np.float32, ('time', 'latitude',
+                                                          'longitude',))
+    
+    # Adicionando dados as variaveis criadas
+    # Atencao pois o uso do '[:]' e obrigatorio, respeitando as dimensoes desejadas
+    #
+    latitude[:] = lat
+    longitude[:] = lon
+    time[:] = t
+    
+    dado_var[:,:,:] = dado
+    
+    # fechando o netcdf
+    ncfile.close()
+
+
+
+
+
+# Plots - intervalo
+# 5 dias (120 horas) - 27/07/2020 00:00 a 31/07/2020 23:00
+idx_t1 = 624
+idx_t2 = 743
+t = np.arange(idx_t1,idx_t2+1)
+
+
+
 
 
 
@@ -53,7 +129,7 @@ lat1 = np.array(ds1['latitude'][:])
 idx_lat1 = find_idx(lat1,lat)
 idx_lon1 = find_idx(lon1,lon)
 # carregando a serie temporal no ponto de interesse
-dado_prec = np.array(ds1['tp'][:,idx_lat1,idx_lon1])*1000  # passando pra mm/h
+dado_prec = np.array(ds1['tp'][t,:,:])*1000  # passando pra mm/h
 
 
 
@@ -78,8 +154,18 @@ lat2 = np.array(ds2['latitude'][:])
 idx_lat2 = find_idx(lat2,lat)
 idx_lon2 = find_idx(lon2,lon)
 # carregando a serie temporal no ponto de interesse
-dado_hs = np.array(ds2['swh'][:,idx_lat2,idx_lon2])
+dado_hs_orig = np.array(ds2['swh'][t,:,:])
 
+# vamos interpolar agora para igualar a grade com os demais arquivos
+dado_hs = np.zeros((len(t),len(lat1),len(lon1)))
+for i in range(len(t)):
+    f = interpolate.interp2d(lat2, lon2, dado_hs_orig[i,:,:], kind='linear')
+    # o comando abaixo parece ter invertido a longitude
+    # entendi que a longitude negativa gerou isso. resolvi com um fliplr
+    # se a latitude for negativa, talvez seja necessario um flipud
+    # solucao pouco elegante. deve ter outra forma de interpolar.
+    dado_hs[i,:,:] = np.fliplr(f(lat1, lon1))  # agora Hs esta na grade comum
+    
 
 
 
@@ -104,7 +190,7 @@ lat3 = np.array(ds3['latitude'][:])
 idx_lat3 = find_idx(lat3,lat)
 idx_lon3 = find_idx(lon3,lon)
 # carregando a serie temporal no ponto de interesse
-dado_msl = np.array(ds3['msl'][:,idx_lat3,idx_lon3])/100  # convertendo pra hPa
+dado_msl = np.array(ds3['msl'][t,:,:])/100  # convertendo pra hPa
 
 
 
@@ -129,137 +215,30 @@ lat4 = np.array(ds4['latitude'][:])
 idx_lat4 = find_idx(lat4,lat)
 idx_lon4 = find_idx(lon4,lon)
 # carregando a serie temporal no ponto de interesse
-dado_u10 = np.array(ds4['u10'][:,idx_lat4,idx_lon4])
-dado_v10 = np.array(ds4['v10'][:,idx_lat4,idx_lon4])
+dado_u10 = np.array(ds4['u10'][t,:,:])
+dado_v10 = np.array(ds4['v10'][t,:,:])
 dado_wmag = np.array(np.sqrt(np.multiply(dado_u10,dado_u10) + np.multiply(dado_v10,dado_v10)))  # magnitude do vento
 
 
 
-# Plots - serie completa
-
-fig = plt.figure()
-plt.title('Magnitude do vento')
-plt.plot(dado_wmag)
-plt.grid()
-plt.xlabel('t (h)')
-plt.ylabel('Vento (m/s)')
-plt.ylim([0, 20])
-fig.set_size_inches(13,4)
-plt.savefig('fig_wmag.jpg', dpi=200, bbox_inches='tight', pad_inches=0.1)
-plt.show()
-plt.close()
-
-fig = plt.figure()
-plt.title('Precipitação total')
-plt.plot(dado_prec)
-plt.grid()
-plt.xlabel('t (h)')
-plt.ylabel('(mm/h)')
-plt.ylim([0, 8])
-fig.set_size_inches(13,4)
-plt.savefig('fig_prec.jpg', dpi=200, bbox_inches='tight', pad_inches=0.1)
-plt.show()
-plt.close()
-
-fig = plt.figure()
-plt.title('Altura significativa de onda')
-plt.plot(dado_hs)
-plt.grid()
-plt.xlabel('t (h)')
-plt.ylabel('(m)')
-plt.ylim([0, 6])
-fig.set_size_inches(13,4)
-plt.savefig('fig_hs.jpg', dpi=200, bbox_inches='tight', pad_inches=0.1)
-plt.show()
-plt.close()
-
-fig = plt.figure()
-plt.title('Pressao ao nivel do mar')
-plt.plot(dado_msl)
-plt.grid()
-plt.xlabel('t (h)')
-plt.ylabel('(hPa)')
-plt.ylim([1005, 1025])
-fig.set_size_inches(13,4)
-plt.savefig('fig_pressao.jpg', dpi=200, bbox_inches='tight', pad_inches=0.1)
-plt.show()
-plt.close()
 
 
 
+# vamos salvar os NC, separadamente, no intervalo definido ------------------
+[n_t, n_lat, n_lon] = dado_prec.shape
 
+save_nc('era5_202007_5d_prec.nc', np.arange(n_t), lat1, lon1, dado_prec,
+        'prec', data1='hours since 2020-07-27')   
 
+save_nc('era5_202007_5d_hs.nc', np.arange(n_t), lat1, lon1, dado_hs,
+        'hs', data1='hours since 2020-07-27')   
 
+save_nc('era5_202007_5d_wind.nc', np.arange(n_t), lat1, lon1, dado_wmag,
+        'wmag', data1='hours since 2020-07-27')   
 
-
-
-
-
-# Plots - intervalo
-# 5 dias (120 horas) - 27/07/2020 00:00 a 31/07/2020 23:00
-x1 = 624
-x2 = 744
-
-fig = plt.figure()
-plt.title('Magnitude do vento')
-plt.plot(np.arange(x1-1,x2), dado_wmag[x1-1:])
-plt.grid()
-plt.xlabel('t (h)')
-plt.ylabel('Vento (m/s)')
-plt.ylim([0, 20])
-fig.set_size_inches(13,4)
-plt.savefig('fig_intervalo_wmag.jpg', dpi=200, bbox_inches='tight', pad_inches=0.1)
-plt.show()
-plt.close()
-
-fig = plt.figure()
-plt.title('Precipitação total')
-plt.plot(np.arange(x1-1,x2), dado_prec[x1-1:])
-plt.grid()
-plt.xlabel('t (h)')
-plt.ylabel('(mm/h)')
-plt.ylim([0, 8])
-fig.set_size_inches(13,4)
-plt.savefig('fig_intervalo_prec.jpg', dpi=200, bbox_inches='tight', pad_inches=0.1)
-plt.show()
-plt.close()
-
-fig = plt.figure()
-plt.title('Altura significativa de onda')
-plt.plot(np.arange(x1-1,x2), dado_hs[x1-1:])
-plt.grid()
-plt.xlabel('t (h)')
-plt.ylabel('(m)')
-plt.ylim([0, 6])
-fig.set_size_inches(13,4)
-plt.savefig('fig_intervalo_hs.jpg', dpi=200, bbox_inches='tight', pad_inches=0.1)
-plt.show()
-plt.close()
-
-fig = plt.figure()
-plt.title('Pressao ao nivel do mar')
-plt.plot(np.arange(x1-1,x2), dado_msl[x1-1:])
-plt.grid()
-plt.xlabel('t (h)')
-plt.ylabel('(hPa)')
-plt.ylim([1005, 1025])
-fig.set_size_inches(13,4)
-plt.savefig('fig_intervalo_pressao.jpg', dpi=200, bbox_inches='tight', pad_inches=0.1)
-plt.show()
-plt.close()
-
-# exportando para .mat
-
-# out = dict()
-# out['wmag'] = out_wmag
-# out['u10'] = out_u10
-# out['v10'] = out_v10
-# out['msl'] = out_msl
-# out['tp'] = out_tp
-# out['shww'] = out_shww
-# out['shts'] = out_shts
-
-# scio.savemat('era5_track.mat', out) 
+    
+    
+    
 
 
 
